@@ -1,52 +1,65 @@
 # UMGAutoBuilder
 
-Config-driven UMG (`WidgetBlueprint`) scaffold generation for Unreal Engine (Editor-only).
+[中文说明](./README.zh-CN.md)
 
-This plugin is designed to be **portable**: it does not depend on any game-specific module. You can extract `Plugins/UMGAutoBuilder/` into another UE project and rebuild.
+Config-driven UMG (`WidgetBlueprint`) scaffold build, patch, and export tools for Unreal Engine editor workflows.
 
-## Positioning
+`UMGAutoBuilder` is designed to stay **portable and project-agnostic**. The plugin does not depend on game-specific runtime modules, so you can copy `Plugins/UMGAutoBuilder/` into another UE project and rebuild it there.
 
-`UMGAutoBuilder` is best used as a **structured UMG scaffold generator**:
+## What It Is For
 
-- generate or refresh panel-style widget skeletons from JSON
-- export an existing widget into a machine-editable JSON starting point
-- apply conservative patch operations to named widgets
+`UMGAutoBuilder` works best as a **structured widget scaffold generator**:
 
-It is **not** intended to be a perfect round-trip replacement for every complex `WidgetBlueprint`. The recommended workflow is: generate the structure first, then let UI or Blueprint authors continue refining the asset in the editor.
+- build panel-oriented widget trees from JSON
+- export an existing widget tree into machine-editable JSON
+- patch named widgets without rebuilding the whole asset
+- use AI-generated layout descriptions as an editor-friendly starting point
+
+It is **not** meant to replace every handcrafted `WidgetBlueprint` forever. The intended workflow is:
+
+1. generate a usable widget skeleton
+2. validate structure and names
+3. let UI / Blueprint authors continue polishing in the editor
 
 ## Features
 
-- **Build mode**: create or rebuild a `WidgetBlueprint` from a JSON spec (widget tree + properties + slots).
-- **Patch mode**: update only specific widgets / append children into an existing widget tree (no full rebuild).
-- **Export mode**: export an existing widget tree into a JSON spec (useful as a starting point or for AI-assisted iteration).
-- **Assertions**: optional `assertWidgets` list to verify that critical widget names exist after generation.
-- **Editor workbench**: run Build / Patch / Export from a lightweight editor tab.
+- **Build mode**: create or fully rebuild a target `WidgetBlueprint`
+- **Patch mode**: update widget props and append children conservatively
+- **Export mode**: serialize an existing widget tree into JSON
+- **Create-if-missing**: optionally create the target widget asset automatically
+- **Assertions**: verify critical widget names with `assertWidgets`
+- **Editor workbench**: run Build / Patch / Export inside `Tools -> UMG Auto Builder`
 
 ## Requirements
 
-- Unreal Engine **5.3+** (tested with 5.3)
-- Editor build (this is an **Editor module**, not runtime)
+- Unreal Engine `5.3+`
+- Editor build only
+- Windows-oriented examples in this README use `PowerShell`
 
-## Commandlets
+## Installation
 
-### 1) Build / Patch
+1. Copy the plugin into your project under `Plugins/UMGAutoBuilder/`
+2. Regenerate project files if needed
+3. Build the editor target
+4. Enable the plugin in Unreal Editor
+5. Restart the editor
 
-Run:
+## Quick Start
+
+### Build or Patch from command line
 
 ```powershell
 UnrealEditor-Cmd.exe "<YourProject>.uproject" `
   -run=UMGAutoBuild `
-  -Config="<path-to-json>" `
+  -Config="C:/Path/To/WidgetSpec.json" `
   -NoAssetRegistryCache -unattended -nop4 -nosplash
 ```
 
-Optional params:
+Optional:
 
-- `-Mode=build|patch` (default: `build`)
+- `-Mode=build|patch` overrides the JSON mode
 
-### 2) Export
-
-Run:
+### Export an existing widget
 
 ```powershell
 UnrealEditor-Cmd.exe "<YourProject>.uproject" `
@@ -57,11 +70,11 @@ UnrealEditor-Cmd.exe "<YourProject>.uproject" `
   -NoAssetRegistryCache -unattended -nop4 -nosplash
 ```
 
-Params:
+Parameters:
 
-- `-Widget=`: widget blueprint asset path
-- `-Out=`: output JSON file path
-- `-Pretty` (optional): pretty-printed JSON
+- `-Widget=` widget blueprint asset path
+- `-Out=` output JSON path
+- `-Pretty` pretty-print exported JSON
 
 ## Editor Workbench
 
@@ -69,15 +82,34 @@ After enabling the plugin, open:
 
 - `Tools -> UMG Auto Builder`
 
-The workbench provides:
+The workbench exposes:
 
-- a `Config Path` field for `Build` / `Patch`
-- a `Widget Path` and `Export Output Path` for `Export`
-- an inline result panel for warnings and errors
+- `Config Path` for Build / Patch
+- `Widget Path` and `Export Output Path` for Export
+- inline result output for warnings and errors
 
-## JSON Schema (high level)
+## Supported Widget Types
 
-Top-level:
+Current JSON node support covers common layout and display widgets:
+
+- `CanvasPanel`
+- `Overlay`
+- `VerticalBox`
+- `HorizontalBox`
+- `WrapBox`
+- `SizeBox`
+- `Border`
+- `Image`
+- `TextBlock`
+- `ProgressBar`
+- `Spacer`
+- `UserWidget` via `props.class`
+
+This makes the plugin especially useful for status panels, info panels, generated lists, and other UI skeletons that benefit from structured authoring.
+
+## JSON Schema Overview
+
+### Top-level example
 
 ```json
 {
@@ -86,16 +118,27 @@ Top-level:
   "createIfMissing": true,
   "mode": "build",
   "assertWidgets": ["RootCanvas", "TitleText"],
-  "root": { "type": "CanvasPanel", "name": "RootCanvas", "children": [] },
+  "root": {
+    "type": "CanvasPanel",
+    "name": "RootCanvas",
+    "children": []
+  },
   "patch": {
     "setWidgetProps": [
-      { "name": "TitleText", "props": { "text": "Hello" } }
+      {
+        "name": "TitleText",
+        "props": { "text": "Hello" }
+      }
     ],
     "ensureChildren": [
       {
         "parent": "SomeWrapBox",
         "children": [
-          { "type": "TextBlock", "name": "NewChild", "props": { "text": "X" } }
+          {
+            "type": "TextBlock",
+            "name": "NewChild",
+            "props": { "text": "X" }
+          }
         ]
       }
     ]
@@ -103,32 +146,49 @@ Top-level:
 }
 ```
 
-Node fields:
+### Top-level fields
 
-- `type`: `CanvasPanel | Overlay | VerticalBox | HorizontalBox | WrapBox | SizeBox | Border | Image | TextBlock | ProgressBar | Spacer | UserWidget`
-- `name`: widget name (`FName`)
-- `props`: widget properties (depends on type)
-- `slot`: parent slot properties (depends on parent panel)
-- `children`: array of child nodes (for panel widgets)
-
-Top-level fields:
-
-- `schemaVersion`: JSON schema version (current: `1`)
-- `targetWidget`: target widget blueprint asset path
-- `createIfMissing`: create the target asset if it does not exist
+- `schemaVersion`: current schema version, currently `1`
+- `targetWidget`: target widget blueprint object path
+- `createIfMissing`: create the asset if it does not exist
 - `mode`: `build` or `patch`
-- `assertWidgets`: optional widget names that must exist after apply
-- `root`: root node used by `build`
-- `patch`: patch operations used by `patch`
+- `assertWidgets`: widget names that must exist after apply
+- `root`: root widget tree node used by build mode
+- `patch`: incremental operations used by patch mode
 
-`UserWidget` props:
+### Node fields
 
-- `class`: soft class path, e.g. `"/Game/UI/WB_Chip.WB_Chip_C"`
+- `type`: widget type
+- `name`: widget name
+- `props`: widget-specific properties
+- `slot`: parent slot properties
+- `children`: child nodes for panel widgets
 
-## Notes
+### `UserWidget` props
 
-- Build mode uses a **fresh WidgetTree** each run to avoid UE name/class collisions when regenerating.
-- Patch mode intentionally stays conservative: it only updates named widgets and/or appends specified children.
-- Export/Build preserve the common slot alignment and size fields used by `HorizontalBoxSlot`, `VerticalBoxSlot`, `OverlaySlot`, and `WrapBoxSlot`.
-- Unknown top-level, node, and patch fields are reported as warnings to make malformed specs easier to diagnose.
+- `class`: soft class path such as `"/Game/UI/WB_Chip.WB_Chip_C"`
+
+## Patch Model
+
+Patch mode intentionally stays conservative:
+
+- `patch.setWidgetProps` updates named existing widgets
+- `patch.ensureChildren` appends child nodes only when missing
+
+This keeps generated updates safer for widgets that already have manual adjustments.
+
+## Typical Workflow
+
+1. Start from an exported JSON file or author one manually
+2. Run `build` to create a first-pass widget skeleton
+3. Iterate in JSON while structure is still changing quickly
+4. Switch to `patch` for safer incremental updates
+5. Finalize complex behavior, animations, bindings, and polish in UMG
+
+## Notes and Limitations
+
+- Build mode replaces the widget tree with a fresh tree to avoid UE naming / class collisions
+- Patch mode does not try to perform deep semantic merges
+- Export / Build currently focus on common panel, slot, and display properties
+- Unknown top-level, node, or patch fields are reported as warnings to help diagnose malformed specs
 
