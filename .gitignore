@@ -1,0 +1,17 @@
+# UE plugin build artifacts
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+
+# IDE / OS
+.vs/
+.vscode/
+*.VC.db
+*.VC.VC.opendb
+*.sln
+*.suo
+*.user
+*.opensdf
+*.sdf
+
